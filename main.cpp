@@ -36,18 +36,22 @@ GLfloat object_diffuse[] = { 0.0, 0.6, 0.7, 1.0 };
 GLfloat object_specular[] = { 0.0, 0.0, 0.8, 1.0 };
 GLfloat object_shine[] = { 5 };
 Vector3f camera = Vector3f(0, 0, -100);
-Vector3f cameraUp = Vector3f(0, 1, 0);
-Vector3f cameraLookTo = Vector3f(0, 0, -100);
 float modelMatrix[16];
 vector<float*> modelMatrixes;
 int screenWidth = 512;
 int screenHeight = 512;
+float fovAngle = 60.0f;
+bool sceneMode = false;
+bool changeFOV = false;
+double fovScale;
 
 vector<float> extractNumbers(string s, char separator) {
 	vector<float> a;
 	string forNow = "";
 	for (unsigned int i = 0; i < s.size(); i++) {
 		if (s[i] == separator) {
+			if (forNow == "")
+				continue;
 			stringstream ss;
 			ss << forNow;
 			float f;
@@ -58,12 +62,13 @@ vector<float> extractNumbers(string s, char separator) {
 			forNow += s[i];
 		}
 	}
-	std::stringstream ss;
-	ss << forNow;
-	float f;
-	ss >> f;
-	a.push_back(f);
-	forNow = "";
+	if (forNow != "") {
+		std::stringstream ss;
+		ss << forNow;
+		float f;
+		ss >> f;
+		a.push_back(f);
+	}
 	return a;
 }
 vector<string> extractString(string s, char separator) {
@@ -81,10 +86,11 @@ vector<string> extractString(string s, char separator) {
 			forNow += s[i];
 		}
 	}
-	std::stringstream ss;
-	ss << forNow;
-	a.push_back(ss.str());
-	forNow = "";
+	if (forNow != "") {
+		std::stringstream ss;
+		ss << forNow;
+		a.push_back(ss.str());
+	}
 	return a;
 }
 vector<int> extractF(string line) {
@@ -94,12 +100,13 @@ vector<int> extractF(string line) {
 	string forNow = "";
 	for (unsigned int i = 0; i < line.length(); i++) {
 		if (line.at(i) == '/') {
+			if (forNow == "")
+				continue;
 			stringstream ss;
 			ss << forNow;
 			float f;
 			ss >> f;
 			ans.push_back(f);
-			i++; //Skipping next /
 			forNow = "";
 		} else {
 			forNow += line.at(i);
@@ -116,9 +123,9 @@ vector<int> extractF(string line) {
 }
 
 void printVector(vector<string> v) {
-	for (unsigned int i = 0; i < v.size(); i++) {
-		//cout << v[i] << endl;
-	}
+	/*for (unsigned int i = 0; i < v.size(); i++) {
+	 cout << v[i] << endl;
+	 }*/
 }
 void printF(vector<vector<pair<int, int> > > vp) {
 	for (unsigned int i = 0; i < vp.size(); i++) {
@@ -144,14 +151,15 @@ void keyboard(unsigned char, int, int);
 void idle(int);
 void init() {
 	glInitNames();
-	gluPerspective(60, 1, 2, 200);
+	gluPerspective(fovAngle, 1, 2, 200);
 	glTranslatef(camera.x, camera.y, camera.z);
 	glClearColor(0, 0, 0, 1);
-	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
 	glViewport(0.0, 0.0, screenWidth, screenHeight);
 
 	glutInitWindowSize(screenWidth, screenHeight);
-	glutCreateWindow("AMAZING 3D MODELING");
+	string windowName = "AMAZING 3D MODELING - ";
+	windowName += (sceneMode ? "Scene" : "Camera");
+	glutCreateWindow(windowName.c_str());
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_LIGHTING);
@@ -171,12 +179,12 @@ void init() {
 	glutMotionFunc(motion);
 	glutSpecialFunc(specialKey);
 	glutKeyboardFunc(keyboard);
-	glutTimerFunc(2,idle,1);
+	glutTimerFunc(2, idle, 1);
 	glutMainLoop();
 }
-void idle(int v){
+void idle(int v) {
 	glutPostRedisplay();
-	glutTimerFunc(1,idle,0);
+	glutTimerFunc(1, idle, 0);
 }
 void displayFunc() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -193,9 +201,18 @@ void displayFunc() {
 	glVertex3f(0.0, 0.0, 0.0);
 	glVertex3f(0.0, 0.0, 1.0);
 	glEnd();
+
 	glColor4f(1.0, 1.0, 1.0, 1.0);
 
-	glPushMatrix();
+	if(changeFOV){
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		fovAngle = fovAngle + fovScale;
+		gluPerspective(fovAngle, 1, 2, 200);
+		glTranslatef(camera.x, camera.y, camera.z);
+		glMatrixMode(GL_MODELVIEW);
+		changeFOV = false;
+	}
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		objectItem currObject = objects[i];
 		float objectMatrix[16];
@@ -203,10 +220,10 @@ void displayFunc() {
 		modelMatrixes.push_back(objectMatrix);
 		glPushName(i);
 		for (unsigned int j = 0; j < currObject.getGroups().size(); j++) {
-			group currG = currObject.getGroups().at(j);
-			glBegin(GL_POLYGON);
-			for (unsigned int k = 0; k < currG.getFs().size(); k++) {
-				vector<pair<int, int> > currF = currG.getFs()[k];
+			group currGroup = currObject.getGroups().at(j);
+			for (unsigned int k = 0; k < currGroup.getFs().size(); k++) {
+				vector<pair<int, int> > currF = currGroup.getFs()[k];
+				glBegin(GL_POLYGON);
 				for (unsigned int kk = 0; kk < currF.size(); kk++) {
 					Vector3f currVertex = vertexes.at(
 							(currF.at(kk).first - 1 >= 0) ?
@@ -220,32 +237,20 @@ void displayFunc() {
 					glVertex3f(currVertex.x / 100, currVertex.y / 100,
 							currVertex.z / 100);
 				}
+				glEnd();
 			}
-			glEnd();
 		}
 	}
-	glPopMatrix();
 	glFlush();
 }
-bool sceneMode = false;
+
 int prevX, prevY;
 int mousePressed = -1;
 void mouse(int button, int state, int x, int y) {
-	//cout << "Mouse Click: " << button << " " << state << " " << x << " " << y << endl;
 	if (state == 0) {
 		prevX = x;
 		prevY = y;
 		mousePressed = button;
-	}
-	if (button == 0) {
-		//left button
-
-	} else if (button == 1) {
-		//middle button
-
-	} else {
-		//Right button
-
 	}
 }
 float angle = 0;
@@ -306,29 +311,30 @@ void motion(int x, int y) {
 					angle = -1;
 				else
 					angle = 1;
-				glRotatef(angle,1, 0, 0);
+				glRotatef(angle, 1, 0, 0);
 			} else {
 				//moved on Y
 				if (changedX > 0)
 					angle = 1;
 				else
 					angle = -1;
-				glRotatef(angle,0, 0, 1);
+				glRotatef(angle, 0, 0, 1);
 
 			}
 		} else if (mousePressed == 1) {
 			if (changedY < 0) {
-				glTranslatef(0, 0, 0.01);
+				angle = 1.05;
 			} else {
-				glTranslatef(0, 0, -0.01);
+				angle = 0.95;
 			}
+			glScalef(angle, angle, angle);
 		} else if (mousePressed == 2) {
-			//TODO
 			if (abs(changedY) > abs(changedX)) {
 				if (changedY > 0)
 					angle = +0.01;
 				else
 					angle = -0.01;
+				glTranslatef(0, angle, 0);
 			} else {
 				//moved on Y
 				if (changedX > 0)
@@ -340,20 +346,28 @@ void motion(int x, int y) {
 		}
 	}
 }
-void zoom(int zoomFactor) {
+void zoom(double scale) {
+	glMatrixMode(GL_MODELVIEW);
+	glScalef(scale, scale, scale);
 	glMatrixMode(GL_PROJECTION);
-	//glTranslatef(camPos.x, camPos.y, camPos.z*zoomFactor);
-	//gluPerspective (zoomFactor, (float)screenWidth/(float)screenHeight, near, far);
-	//glScalef(zoomFactor,zoomFactor,1);
 }
+
 
 void specialKey(int key, int x, int y) {
 	switch (key) {
 	case GLUT_KEY_F2:
-		zoom(+0.05);
+		changeFOV = true;
+		fovScale = 0.05;
 		break;
 	case GLUT_KEY_F3:
-		zoom(-0.05);
+		changeFOV = true;
+		fovScale = -0.05;
+		break;
+	case GLUT_KEY_UP:
+		zoom(1.05);
+		break;
+	case GLUT_KEY_DOWN:
+		zoom(0.95);
 		break;
 	default:
 		cout << "Not recognized" << endl;
@@ -364,12 +378,15 @@ void specialKey(int key, int x, int y) {
 void keyboard(unsigned char key, int x, int y) {
 	if (key == ' ') {
 		sceneMode = !sceneMode;
+		string windowName = "AMAZING 3D MODELING - ";
+		windowName += (sceneMode ? "Scene" : "Camera");
+		glutSetWindowTitle(windowName.c_str());
 	}
 }
 int main(int argc, char* argv[]) {
 
 	currentObject = new objectItem(-1); //Creating default object
-	ifstream sceneFile((argc > 1) ? argv[1] : "simple.obj");
+	ifstream sceneFile((argc > 1) ? argv[1] : "doll.obj");
 	vector<string> currLine;
 	string line;
 	while (std::getline(sceneFile, line)) {
@@ -435,7 +452,6 @@ int main(int argc, char* argv[]) {
 	}
 	currentObject->addGroup(*currentGroup);
 	objects.push_back(*currentObject);
-	int facesCount = 0;
 	cout << "Finished loading file!" << endl;
 	cout << "Total of " << vertexes.size() << " Vertexes" << endl;
 	cout << "Total of " << vertexesNormal.size() << " Vertexes Normals" << endl;
@@ -443,15 +459,6 @@ int main(int argc, char* argv[]) {
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		cout << "In object " << (i + 1) << " There are "
 				<< objects[i].getGroups().size() << " groups" << endl;
-		if (objects[i].getGroups().size() > 0) {
-			for (unsigned int j = 0; j < objects[i].getGroups().size(); j++) {
-				/*cout << "Group with name: "
-				 << objects[i].getGroups()[j].getName() << endl;
-				 cout << "With fs: " << endl;
-				 printF(objects[i].getGroups()[j].getFs());
-				 facesCount += objects[i].getGroups()[j].getFs().size();*/
-			}
-		}
 	}
 	glutInit(&argc, argv);
 	init();
