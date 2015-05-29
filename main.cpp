@@ -35,7 +35,9 @@ GLfloat object_ambient[] = { 0.3, 0.4, 0.5, 1.0 };
 GLfloat object_diffuse[] = { 0.0, 0.6, 0.7, 1.0 };
 GLfloat object_specular[] = { 0.0, 0.0, 0.8, 1.0 };
 GLfloat object_shine[] = { 5 };
-Vector3f camPos = Vector3f(0, 0, -100);
+Vector3f camera = Vector3f(0, 0, -100);
+Vector3f cameraUp = Vector3f(0, 1, 0);
+Vector3f cameraLookTo = Vector3f(0, 0, -100);
 float modelMatrix[16];
 vector<float*> modelMatrixes;
 int screenWidth = 512;
@@ -69,6 +71,8 @@ vector<string> extractString(string s, char separator) {
 	string forNow = "";
 	for (unsigned int i = 0; i < s.size(); i++) {
 		if (s[i] == separator) {
+			if (forNow == "")
+				continue;
 			stringstream ss;
 			ss << forNow;
 			a.push_back(ss.str());
@@ -137,10 +141,11 @@ void mouse(int, int, int, int);
 void motion(int, int);
 void specialKey(int, int, int);
 void keyboard(unsigned char, int, int);
+void idle(int);
 void init() {
 	glInitNames();
 	gluPerspective(60, 1, 2, 200);
-	glTranslatef(camPos.x, camPos.y, camPos.z);
+	glTranslatef(camera.x, camera.y, camera.z);
 	glClearColor(0, 0, 0, 1);
 	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
 	glViewport(0.0, 0.0, screenWidth, screenHeight);
@@ -152,14 +157,27 @@ void init() {
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 	glEnable(GL_NORMALIZE);
+	glEnable(GL_COLOR_MATERIAL);
+	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+	glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+	glMaterialfv(GL_FRONT, GL_AMBIENT, object_ambient);
+	glMaterialfv(GL_FRONT, GL_DIFFUSE, object_diffuse);
+	glMaterialfv(GL_FRONT, GL_SPECULAR, object_specular);
+	glMaterialfv(GL_FRONT, GL_SHININESS, object_shine);
 	glutDisplayFunc(displayFunc);
 	glutMouseFunc(mouse);
 	glutMotionFunc(motion);
 	glutSpecialFunc(specialKey);
 	glutKeyboardFunc(keyboard);
+	glutTimerFunc(2,idle,1);
 	glutMainLoop();
 }
-
+void idle(int v){
+	glutPostRedisplay();
+	glutTimerFunc(1,idle,0);
+}
 void displayFunc() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glBegin(GL_LINES);
@@ -175,25 +193,15 @@ void displayFunc() {
 	glVertex3f(0.0, 0.0, 0.0);
 	glVertex3f(0.0, 0.0, 1.0);
 	glEnd();
-	glClearColor(0, 0, 0, 0);
-	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-	glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
-	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-	glMaterialfv(GL_FRONT, GL_AMBIENT, object_ambient);
-	glMaterialfv(GL_FRONT, GL_DIFFUSE, object_diffuse);
-	glMaterialfv(GL_FRONT, GL_SPECULAR, object_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, object_shine);
-	glEnable(GL_COLOR_MATERIAL);
+	glColor4f(1.0, 1.0, 1.0, 1.0);
+
 	glPushMatrix();
-	glGetFloatv(GL_MODELVIEW_MATRIX, modelMatrix);
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		objectItem currObject = objects[i];
-		glPushMatrix();
 		float objectMatrix[16];
 		glGetFloatv(GL_MODELVIEW_MATRIX, objectMatrix);
 		modelMatrixes.push_back(objectMatrix);
-		glLoadName(i);
+		glPushName(i);
 		for (unsigned int j = 0; j < currObject.getGroups().size(); j++) {
 			group currG = currObject.getGroups().at(j);
 			glBegin(GL_POLYGON);
@@ -214,7 +222,6 @@ void displayFunc() {
 				}
 			}
 			glEnd();
-			glPopMatrix();
 		}
 	}
 	glPopMatrix();
@@ -289,10 +296,8 @@ void motion(int x, int y) {
 			}
 		}
 		glPopMatrix();
-	} else {
-		//TODO
-		glPushMatrix();
 		glMatrixMode(GL_PROJECTION);
+	} else {
 		if (mousePressed == 0) {
 			//Left Pressed
 			if (abs(changedY) > abs(changedX)) {
@@ -301,14 +306,15 @@ void motion(int x, int y) {
 					angle = -1;
 				else
 					angle = 1;
-				glRotatef(angle, 1.0f, 0.0f, 0.0f);
+				glRotatef(angle,1, 0, 0);
 			} else {
 				//moved on Y
 				if (changedX > 0)
 					angle = 1;
 				else
 					angle = -1;
-				glRotatef(angle, 0.0f, 0.0f, 1.0f);
+				glRotatef(angle,0, 0, 1);
+
 			}
 		} else if (mousePressed == 1) {
 			if (changedY < 0) {
@@ -317,33 +323,28 @@ void motion(int x, int y) {
 				glTranslatef(0, 0, -0.01);
 			}
 		} else if (mousePressed == 2) {
+			//TODO
 			if (abs(changedY) > abs(changedX)) {
-				//moved on Y
 				if (changedY > 0)
-					angle = -0.01;
+					angle = +0.01;
 				else
-					angle = 0.01;
-				glTranslatef(0, angle, 0);
+					angle = -0.01;
 			} else {
 				//moved on Y
 				if (changedX > 0)
-					angle = 0.01;
-				else
 					angle = -0.01;
+				else
+					angle = +0.01;
 				glTranslatef(angle, 0, 0);
 			}
 		}
-		glPopMatrix();
 	}
-	glMatrixMode(GL_PROJECTION);
-	glutPostRedisplay();
 }
 void zoom(int zoomFactor) {
 	glMatrixMode(GL_PROJECTION);
 	//glTranslatef(camPos.x, camPos.y, camPos.z*zoomFactor);
 	//gluPerspective (zoomFactor, (float)screenWidth/(float)screenHeight, near, far);
 	//glScalef(zoomFactor,zoomFactor,1);
-	glutPostRedisplay();
 }
 
 void specialKey(int key, int x, int y) {
@@ -409,8 +410,10 @@ int main(int argc, char* argv[]) {
 					int objIndex = findObject(atof(currLine[1].c_str()));
 					if (objIndex > 0) {
 						currentObject = &objects.at(objIndex);
+					} else {
+						currentObject = new objectItem(
+								atof(currLine[1].c_str()));
 					}
-					currentObject = new objectItem(atof(currLine[1].c_str()));
 				} else {
 					currentObject = new objectItem();
 				}
@@ -420,8 +423,7 @@ int main(int argc, char* argv[]) {
 				for (unsigned int i = 1; i < currLine.size(); i++) {
 					vector<int> currFi = extractF(currLine[i]);
 					if (currFi.size() == 2) {
-							currF.push_back(
-									pair<int, int>(currFi[0], currFi[1]));
+						currF.push_back(pair<int, int>(currFi[0], currFi[1]));
 					}
 				}
 				currentGroup->addToFs(currF);
@@ -433,6 +435,7 @@ int main(int argc, char* argv[]) {
 	}
 	currentObject->addGroup(*currentGroup);
 	objects.push_back(*currentObject);
+	int facesCount = 0;
 	cout << "Finished loading file!" << endl;
 	cout << "Total of " << vertexes.size() << " Vertexes" << endl;
 	cout << "Total of " << vertexesNormal.size() << " Vertexes Normals" << endl;
@@ -440,15 +443,15 @@ int main(int argc, char* argv[]) {
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		cout << "In object " << (i + 1) << " There are "
 				<< objects[i].getGroups().size() << " groups" << endl;
-		/*if (objects[i].getGroups().size() > 0) {
-		 for (unsigned int j = 0; j < objects[i].getGroups().size(); j++) {
-		 cout << "Group with name: "
-		 << objects[i].getGroups()[j].getName() << endl;
-		 cout << "With fs: " << endl;
-		 printF(objects[i].getGroups()[j].getFs());
-
-		 }
-		 }*/
+		if (objects[i].getGroups().size() > 0) {
+			for (unsigned int j = 0; j < objects[i].getGroups().size(); j++) {
+				/*cout << "Group with name: "
+				 << objects[i].getGroups()[j].getName() << endl;
+				 cout << "With fs: " << endl;
+				 printF(objects[i].getGroups()[j].getFs());
+				 facesCount += objects[i].getGroups()[j].getFs().size();*/
+			}
+		}
 	}
 	glutInit(&argc, argv);
 	init();
