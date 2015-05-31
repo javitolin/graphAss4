@@ -149,17 +149,24 @@ void motion(int, int);
 void specialKey(int, int, int);
 void keyboard(unsigned char, int, int);
 void idle(int);
-void init() {
-	glInitNames();
-	gluPerspective(fovAngle, 1, 2, 200);
+void setTransformations() {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(fovAngle, screenWidth / screenHeight, 2, 200);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
 	glTranslatef(camera.x, camera.y, camera.z);
-	glClearColor(0, 0, 0, 1);
-	glViewport(0.0, 0.0, screenWidth, screenHeight);
-
-	glutInitWindowSize(screenWidth, screenHeight);
+}
+void init() {
 	string windowName = "AMAZING 3D MODELING - ";
 	windowName += (sceneMode ? "Scene" : "Camera");
+	glutInitWindowSize(screenWidth, screenHeight);
 	glutCreateWindow(windowName.c_str());
+	glViewport(0.0, 0.0, screenWidth, screenHeight);
+	setTransformations();
+	glInitNames();
+	glClearColor(0, 0, 0, 1);
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_LIGHTING);
@@ -191,33 +198,26 @@ void displayFunc() {
 	glBegin(GL_LINES);
 	glColor3f(1, 0, 0);
 	glVertex3f(0.0, 0.0, 0.0);
-	glVertex3f(1.0, 0.0, 0.0);
+	glVertex3f(100.0, 0.0, 0.0);
 
 	glColor3f(0, 0, 1);
 	glVertex3f(0.0, 0.0, 0.0);
-	glVertex3f(0.0, 1.0, 0.0);
+	glVertex3f(0.0, 100.0, 0.0);
 
 	glColor3f(0, 1, 0);
 	glVertex3f(0.0, 0.0, 0.0);
-	glVertex3f(0.0, 0.0, 1.0);
+	glVertex3f(0.0, 0.0, 100.0);
 	glEnd();
 
 	glColor4f(1.0, 1.0, 1.0, 1.0);
 
-	if(changeFOV){
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		fovAngle = fovAngle + fovScale;
-		gluPerspective(fovAngle, 1, 2, 200);
-		glTranslatef(camera.x, camera.y, camera.z);
-		glMatrixMode(GL_MODELVIEW);
+	if (changeFOV) {
+		fovAngle += fovScale;
 		changeFOV = false;
+		setTransformations();
 	}
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		objectItem currObject = objects[i];
-		float objectMatrix[16];
-		glGetFloatv(GL_MODELVIEW_MATRIX, objectMatrix);
-		modelMatrixes.push_back(objectMatrix);
 		glPushName(i);
 		for (unsigned int j = 0; j < currObject.getGroups().size(); j++) {
 			group currGroup = currObject.getGroups().at(j);
@@ -234,8 +234,8 @@ void displayFunc() {
 									currF.at(kk).second - 1 : 0);
 
 					glNormal3f(currNormal.x, currNormal.y, currNormal.z);
-					glVertex3f(currVertex.x / 100, currVertex.y / 100,
-							currVertex.z / 100);
+					glVertex3f(currVertex.x / 1, currVertex.y / 1,
+							currVertex.z / 1);
 				}
 				glEnd();
 			}
@@ -287,16 +287,16 @@ void motion(int x, int y) {
 			if (abs(changedY) > abs(changedX)) {
 				//moved on Y
 				if (changedY > 0)
-					angle = -0.01;
+					angle = -1;
 				else
-					angle = 0.01;
+					angle = 1;
 				glTranslatef(0, angle, 0);
 			} else {
 				//moved on Y
 				if (changedX > 0)
-					angle = 0.01;
+					angle = 1;
 				else
-					angle = -0.01;
+					angle = -1;
 				glTranslatef(angle, 0, 0);
 			}
 		}
@@ -318,8 +318,7 @@ void motion(int x, int y) {
 					angle = 1;
 				else
 					angle = -1;
-				glRotatef(angle, 0, 0, 1);
-
+				glRotatef(angle, 0, 1, 0);
 			}
 		} else if (mousePressed == 1) {
 			if (changedY < 0) {
@@ -328,30 +327,34 @@ void motion(int x, int y) {
 				angle = 0.95;
 			}
 			glScalef(angle, angle, angle);
+			camera.x *= angle;
+			camera.y *= angle;
+			camera.z *= angle;
 		} else if (mousePressed == 2) {
 			if (abs(changedY) > abs(changedX)) {
 				if (changedY > 0)
-					angle = +0.01;
+					angle = +0.1;
 				else
-					angle = -0.01;
+					angle = -0.1;
 				glTranslatef(0, angle, 0);
+				camera.y += angle;
 			} else {
 				//moved on Y
 				if (changedX > 0)
-					angle = -0.01;
+					angle = -0.1;
 				else
-					angle = +0.01;
+					angle = +0.1;
 				glTranslatef(angle, 0, 0);
+				camera.x += angle;
 			}
 		}
 	}
 }
 void zoom(double scale) {
 	glMatrixMode(GL_MODELVIEW);
-	glScalef(scale, scale, scale);
+	glScalef(scale, scale, 1);
 	glMatrixMode(GL_PROJECTION);
 }
-
 
 void specialKey(int key, int x, int y) {
 	switch (key) {
@@ -386,7 +389,7 @@ void keyboard(unsigned char key, int x, int y) {
 int main(int argc, char* argv[]) {
 
 	currentObject = new objectItem(-1); //Creating default object
-	ifstream sceneFile((argc > 1) ? argv[1] : "doll.obj");
+	ifstream sceneFile((argc > 1) ? argv[1] : "simple.obj");
 	vector<string> currLine;
 	string line;
 	while (std::getline(sceneFile, line)) {
