@@ -153,9 +153,8 @@ void setTransformations() {
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	gluPerspective(fovAngle, screenWidth / screenHeight, 2, 200);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
 	glTranslatef(camera.x, camera.y, camera.z);
+	glMatrixMode(GL_MODELVIEW);
 }
 void init() {
 	string windowName = "AMAZING 3D MODELING - ";
@@ -327,9 +326,6 @@ void motion(int x, int y) {
 				angle = 0.95;
 			}
 			glScalef(angle, angle, angle);
-			camera.x *= angle;
-			camera.y *= angle;
-			camera.z *= angle;
 		} else if (mousePressed == 2) {
 			if (abs(changedY) > abs(changedX)) {
 				if (changedY > 0)
@@ -337,7 +333,6 @@ void motion(int x, int y) {
 				else
 					angle = -0.1;
 				glTranslatef(0, angle, 0);
-				camera.y += angle;
 			} else {
 				//moved on Y
 				if (changedX > 0)
@@ -345,7 +340,6 @@ void motion(int x, int y) {
 				else
 					angle = +0.1;
 				glTranslatef(angle, 0, 0);
-				camera.x += angle;
 			}
 		}
 	}
