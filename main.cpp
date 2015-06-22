@@ -18,6 +18,7 @@
 #define SPACEBAR 32
 #define far 20.0
 #define near 2.0
+#define bufSize 512
 using namespace std;
 
 vector<objectItem> objects;
@@ -44,6 +45,13 @@ float fovAngle = 60.0f;
 bool sceneMode = false;
 bool changeFOV = false;
 double fovScale;
+
+float zValue[4];
+GLint hits;
+int ii = 0;
+int jj = 0;
+bool isPick = false;
+int xx, yy;
 
 vector<float> extractNumbers(string s, char separator) {
 	vector<float> a;
@@ -156,6 +164,29 @@ void setTransformations() {
 	glTranslatef(camera.x, camera.y, camera.z);
 	glMatrixMode(GL_MODELVIEW);
 }
+
+void startPicking(GLuint *selectionBuf) {
+	glSelectBuffer(bufSize, selectionBuf); //declare buffer for input in selection mode
+	glRenderMode(GL_SELECT); //change to selecting mode
+	glInitNames();			//initialize names stack
+	glPushName(-1);			//push name
+}
+void processHits(GLint hits, GLuint *buffer) {
+	float z1, z2;
+	for (int i = 0; buffer[i] > 0; i += 5) {
+		z1 = buffer[i + 1] / 4294967295.0;
+		z2 = buffer[i + 2] / 4294967295.0;
+
+		printf("z1 = %f ,z2 = %f zValue = %f\n", z1, z2, zValue[0]);
+		if ((zValue[0] <= z1 + 0.0001 && zValue[0] >= z2 - 0.0001)
+				|| (zValue[0] >= z1 - 0.0001 && zValue[0] <= z2 + 0.0001)) {//try to locate which name is correlated with the pressed pixel according to z value
+			ii = buffer[i + 3];
+			jj = buffer[i + 4];
+		}
+
+	}
+}
+
 void init() {
 	string windowName = "AMAZING 3D MODELING - ";
 	windowName += (sceneMode ? "Scene" : "Camera");
@@ -164,6 +195,7 @@ void init() {
 	glViewport(0.0, 0.0, screenWidth, screenHeight);
 	setTransformations();
 	glInitNames();
+	glPushName(0); //push 0 on stack
 	glClearColor(0, 0, 0, 1);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -192,8 +224,7 @@ void idle(int v) {
 	glutPostRedisplay();
 	glutTimerFunc(1, idle, 0);
 }
-void displayFunc() {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+void drawImage(GLenum type) {
 	glBegin(GL_LINES);
 	glColor3f(1, 0, 0);
 	glVertex3f(0.0, 0.0, 0.0);
@@ -215,10 +246,38 @@ void displayFunc() {
 		changeFOV = false;
 		setTransformations();
 	}
+	glPushMatrix();
 	for (unsigned int i = 0; i < objects.size(); i++) {
 		objectItem currObject = objects[i];
-		glPushName(i);
+		if (type == GL_SELECT)
+			glLoadName(currObject.getName());
 		for (unsigned int j = 0; j < currObject.getGroups().size(); j++) {
+			if (currentObject->getMoveType() > -1) {
+				//object has moved
+				glPushMatrix();
+				switch (currentObject->getMoveType()) {
+				case 0: //Translation
+					glTranslatef(currentObject->getMoves()[0],
+							currentObject->getMoves()[1],
+							currentObject->getMoves()[2]);
+					break;
+				case 1: //Rotation
+					if (currentObject->getSideToRotate() == 'u') {
+						glRotatef(currentObject->getSideToRotate(), 0,1,0);
+					} else if (currentObject->getSideToRotate() == 'r') {
+						glRotatef(currentObject->getSideToRotate(), 0,0,1);
+					} else if (currentObject->getSideToRotate() == 'l') {
+						glRotatef(currentObject->getSideToRotate(), 0,0,-1);
+					} else{ //down
+						glRotatef(currentObject->getSideToRotate(), 0,-1,0);
+					}
+					break;
+				case 2: //Scale
+					glScalef(currentObject->getScale()[0],currentObject->getScale()[1],currentObject->getScale()[2]);
+					break;
+				}
+				glPopMatrix();
+			}
 			group currGroup = currObject.getGroups().at(j);
 			for (unsigned int k = 0; k < currGroup.getFs().size(); k++) {
 				vector<pair<int, int> > currF = currGroup.getFs()[k];
@@ -240,9 +299,39 @@ void displayFunc() {
 			}
 		}
 	}
+	glPopMatrix();
+}
+void displayFunc() {
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	drawImage(GL_RENDER);
 	glFlush();
 }
+void processHits2(GLint hits, GLuint buffer[]) {
+	int i, j;
+	GLuint names, *ptr, minZ, *ptrNames, numberOfNames;
 
+	printf("hits = %d\n", hits);
+	ptr = (GLuint *) buffer;
+	minZ = 0xffffffff;
+	for (i = 0; i < hits; i++) {
+		names = *ptr;
+		ptr++;
+		if (*ptr < minZ) {
+			numberOfNames = names;
+			minZ = *ptr;
+			ptrNames = ptr + 2;
+		}
+
+		ptr += names + 2;
+	}
+	printf("The closest hit names are ");
+	ptr = ptrNames;
+	for (j = 0; j < numberOfNames; j++, ptr++) {
+		printf("%d ", *ptr);
+	}
+	printf("\n");
+
+}
 int prevX, prevY;
 int mousePressed = -1;
 void mouse(int button, int state, int x, int y) {
@@ -251,6 +340,53 @@ void mouse(int button, int state, int x, int y) {
 		prevY = y;
 		mousePressed = button;
 	}
+
+	//GLint viewport[5];
+	GLint viewport[4];
+	GLuint selectionBuf[bufSize];
+	GLuint buffer[bufSize];
+	float pix[4];
+	for (unsigned int i = 0; i < bufSize; i++)
+		selectionBuf[i] = 0;
+	if (state == 0) {
+		glGetIntegerv(GL_VIEWPORT, viewport); //reading viewport parameters
+		glReadPixels(x, viewport[3] - y, 1, 1, GL_RGBA, GL_FLOAT, pix);
+
+		//	  printf("depth = %f, x = %d, y = %d\n",pixels[(viewport[3]-y)*512+x],x,viewport[3]-y);
+
+		glMatrixMode(GL_PROJECTION);
+
+		glReadPixels((GLdouble) x, (GLdouble) viewport[3] - y, 2, 2,
+		GL_DEPTH_COMPONENT, GL_FLOAT, zValue);
+
+		glPushMatrix();	//saves current projection matrix
+		glLoadIdentity();
+
+		startPicking(selectionBuf); //preper selection mode
+
+		gluPickMatrix((GLdouble) x, (GLdouble) viewport[3] - y, 1, 1, viewport); //change matrices so only the area of the picking pixel can be seen.
+		gluPerspective(fovAngle, 1, near, far); //return to perspective state
+
+		glMatrixMode(GL_MODELVIEW);
+		drawImage(GL_SELECT); //draws board on background
+
+		hits = glRenderMode(GL_RENDER); //gets hits number
+		printf("hits: %d\n", hits);
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix(); //restores projection matrix
+
+		glMatrixMode(GL_MODELVIEW);
+		processHits(hits, selectionBuf); //check hits
+
+		//  printf("depth %f hits: %d\n\n",pixels[(viewport[3]-y)*512+x], hits);
+		if (zValue[0] < 1.0) {
+			isPick = true;
+			xx = x;
+			yy = y;
+		}
+
+	} else
+		isPick = false;
 }
 float angle = 0;
 void motion(int x, int y) {
@@ -415,6 +551,7 @@ int main(int argc, char* argv[]) {
 				if (currentObject != 0
 						&& (currentObject->getName() != -1
 								|| currentObject->getGroups().size() > 0)) {
+					currentObject->addGroup(*currentGroup);
 					//save previous object
 					objects.push_back(*currentObject);
 				}
@@ -439,6 +576,9 @@ int main(int argc, char* argv[]) {
 					if (currFi.size() == 2) {
 						currF.push_back(pair<int, int>(currFi[0], currFi[1]));
 					}
+				}
+				if (currentGroup == 0) {
+					currentGroup = new group();
 				}
 				currentGroup->addToFs(currF);
 				printVector(currLine);

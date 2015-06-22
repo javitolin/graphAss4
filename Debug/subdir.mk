@@ -5,16 +5,24 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 OBJ_SRCS += \
 ../doll.obj \
+../obj.obj \
+../scene.obj \
 ../simple.obj 
 
 CPP_SRCS += \
-../main.cpp 
+../group.cpp \
+../main.cpp \
+../objectItem.cpp 
 
 OBJS += \
-./main.o 
+./group.o \
+./main.o \
+./objectItem.o 
 
 CPP_DEPS += \
-./main.d 
+./group.d \
+./main.d \
+./objectItem.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
