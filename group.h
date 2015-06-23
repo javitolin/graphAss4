@@ -46,6 +46,9 @@ public:
 	int getName() {
 		return name;
 	}
+	void addToName(int i){
+		name += i;
+	}
 	vector<group> getGroups() {
 		return groups;
 	}

@@ -170,6 +170,7 @@ void startPicking(GLuint *selectionBuf) {
 	glRenderMode(GL_SELECT); //change to selecting mode
 	glInitNames();			//initialize names stack
 	glPushName(-1);			//push name
+
 }
 void processHits(GLint hits, GLuint *buffer) {
 	float z1, z2;
@@ -307,7 +308,7 @@ void displayFunc() {
 	glFlush();
 }
 void processHits2(GLint hits, GLuint buffer[]) {
-	int i, j;
+	GLuint i, j;
 	GLuint names, *ptr, minZ, *ptrNames, numberOfNames;
 
 	printf("hits = %d\n", hits);
@@ -344,7 +345,6 @@ void mouse(int button, int state, int x, int y) {
 	//GLint viewport[5];
 	GLint viewport[4];
 	GLuint selectionBuf[bufSize];
-	GLuint buffer[bufSize];
 	float pix[4];
 	for (unsigned int i = 0; i < bufSize; i++)
 		selectionBuf[i] = 0;
